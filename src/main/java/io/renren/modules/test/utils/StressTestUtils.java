@@ -16,7 +16,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,7 +26,7 @@ import static io.renren.common.utils.ConfigConstant.OS_NAME_LC;
 
 /**
  * 性能测试的工具类，同时用于读取配置文件。
- * 也可以将性能测试参数配置到系统参数配置中去。
+ * 配置文件在数据库中配置
  */
 //@ConfigurationProperties(prefix = "test.stress")
 @Component
@@ -43,6 +42,7 @@ public class StressTestUtils {
     public static final Integer RUNNING = 1;
     public static final Integer RUN_SUCCESS = 2;
     public static final Integer RUN_ERROR = 3;
+    public static final Integer NO_FILE = 4;
 
     /**
      * 是否需要测试报告的状态标识
@@ -130,6 +130,13 @@ public class StressTestUtils {
      */
     public final static String MASTER_JMETER_REPLACE_FILE_KEY = "MASTER_JMETER_REPLACE_FILE_KEY";
 
+    /**
+     * 脚本的默认最长定时执行时间，是否开启，默认是为true，开启。
+     * 具体的执行时间，由脚本文件字段来配置。单位是秒，对应的是Jmeter脚本的duration字段。
+     * 该功能添加的原因是应对脚本执行，但是忘记了关闭的情况，这样会导致浪费系统资源，尤其是线上操作尤其危险。
+     */
+    public final static String SCRIPT_SCHEDULER_DURATION_KEY = "SCRIPT_SCHEDULER_DURATION_KEY";
+
     public static String getJmeterHome() {
         return sysConfigService.getValue(MASTER_JMETER_HOME_KEY);
     }
@@ -139,15 +146,19 @@ public class StressTestUtils {
     }
 
     public boolean isUseJmeterScript() {
-        return Boolean.valueOf(sysConfigService.getValue(MASTER_JMETER_USE_SCRIPT_KEY));
+        return Boolean.parseBoolean(sysConfigService.getValue(MASTER_JMETER_USE_SCRIPT_KEY));
     }
 
     public boolean isReplaceFile() {
-        return Boolean.valueOf(sysConfigService.getValue(MASTER_JMETER_REPLACE_FILE_KEY));
+        return Boolean.parseBoolean(sysConfigService.getValue(MASTER_JMETER_REPLACE_FILE_KEY));
     }
 
     public boolean isMasterGenerateReport() {
-        return Boolean.valueOf(sysConfigService.getValue(MASTER_JMETER_GENERATE_REPORT_KEY));
+        return Boolean.parseBoolean(sysConfigService.getValue(MASTER_JMETER_GENERATE_REPORT_KEY));
+    }
+
+    public boolean isScriptSchedulerDurationEffect() {
+        return Boolean.parseBoolean(sysConfigService.getValue(SCRIPT_SCHEDULER_DURATION_KEY));
     }
 
     public static String getSuffix4() {
@@ -326,20 +337,11 @@ public class StressTestUtils {
      * 如果删除的测试报告是测试脚本唯一的测试报告，则将目录也一并删除。
      */
     public void deleteJmxDir(String reportPath) {
-        try {
-            String jmxDir = reportPath.substring(0, reportPath.lastIndexOf(File.separator));
-            File jmxDirFile = new File(jmxDir);
-            if (FileUtils.sizeOf(jmxDirFile) == 0L) {
-                FileUtils.forceDelete(jmxDirFile);
-            }
-        } catch (FileNotFoundException | IllegalArgumentException e) {
-            logger.error("要删除的测试报告上级文件夹找不到(删除成功)  " + e.getMessage());
-        } catch (IOException e) {
-            throw new RRException("删除测试报告上级文件夹异常失败", e);
-        }
+        String jmxDir = reportPath.substring(0, reportPath.lastIndexOf(File.separator));
+        FileUtils.deleteQuietly(new File(jmxDir));
     }
 
-    public void pause(long ms){
+    public void pause(long ms) {
         try {
             TimeUnit.MILLISECONDS.sleep(ms);
         } catch (InterruptedException e) {
